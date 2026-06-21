@@ -1,0 +1,88 @@
+@import "tailwindcss";
+
+@theme {
+  --font-serif: "EB Garamond", serif;
+  --font-sans: "Manrope", sans-serif;
+
+  /* Custom palette representing the New Academic/Tactile Modernism style */
+  --color-background: #fbf9f5;
+  --color-surface: #fbf9f5;
+  --color-surface-dim: #dbdad6;
+  --color-surface-bright: #fbf9f5;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f5f3ef;
+  --color-surface-container: #efeeea;
+  --color-surface-container-high: #eae8e4;
+  --color-surface-container-highest: #e4e2de;
+  --color-on-surface: #1b1c1a;
+  --color-on-surface-variant: #44474d;
+  --color-inverse-surface: #30312e;
+  --color-inverse-on-surface: #f2f0ed;
+  
+  --color-outline: #75777e;
+  --color-outline-variant: #c5c6ce;
+  --color-surface-tint: #4e5f7e;
+  
+  /* Brand colors */
+  --color-primary: #031632;       /* Scholarly Navy */
+  --color-on-primary: #ffffff;
+  --color-primary-container: #1a2b48;
+  --color-on-primary-container: #8293b5;
+  --color-inverse-primary: #b6c7eb;
+  
+  --color-secondary: #3b6934;     /* Forest Green */
+  --color-on-secondary: #ffffff;
+  --color-secondary-container: #b9eeab;
+  --color-on-secondary-container: #3f6d38;
+  
+  --color-tertiary: #370100;      /* Clay / Terracotta */
+  --color-on-tertiary: #ffffff;
+  --color-tertiary-container: #5a0b04;
+  --color-on-tertiary-container: #e2715e;
+
+  --color-error: #ba1a1a;
+  --color-on-error: #ffffff;
+  --color-error-container: #ffdad6;
+  --color-on-error-container: #93000a;
+}
+
+/* Custom styles for scholarly tactile feel */
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-background);
+  color: var(--color-on-surface);
+}
+
+.eb-garamond {
+  font-family: var(--font-serif);
+}
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.book-card-shadow {
+  box-shadow: 0px 4px 20px 0px rgba(3, 22, 50, 0.04);
+  transition: all 0.3s ease;
+}
+
+.book-card-shadow:hover {
+  box-shadow: 0px 8px 30px 0px rgba(3, 22, 50, 0.08);
+  transform: translateY(-2px);
+}
+
+/* Custom scrollbars for academic listings */
+.academic-scroll::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+.academic-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.academic-scroll::-webkit-scrollbar-thumb {
+  background: var(--color-surface-container-highest);
+  border-radius: 99px;
+}
+

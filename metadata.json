@@ -1,0 +1,6 @@
+{
+  "name": "ReBook 續頁",
+  "description": "ReBook 續頁 ─ 校園教科書與學術教材二手、互助交換平台",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
