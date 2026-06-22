@@ -676,16 +676,25 @@ const newBooks = [
   }
 ];
 
+function removeChineseParentheses(title) {
+  return title
+    .replace(/\([^)]*[\u4e00-\u9fa5]+[^)]*\)/g, "") // 移除包含中文的半形括號
+    .replace(/（[^）]*[\u4e00-\u9fa5]+[^）]*）/g, "") // 移除包含中文的全形括號
+    .replace(/\s+/g, " ") // 合併多個空格
+    .trim();
+}
+
 async function seed() {
   console.log("正在開始批次寫入 30 筆高品質臺灣大學教科書至 Supabase...");
   let count = 0;
   
   for (const book of newBooks) {
+    const cleanTitle = removeChineseParentheses(book.title);
     const { data, error } = await supabase
       .from("books")
       .insert([
         {
-          title: book.title,
+          title: cleanTitle,
           author: book.author,
           edition: book.edition,
           price: book.price,
@@ -710,10 +719,10 @@ async function seed() {
       .select();
 
     if (error) {
-      console.error(`新增失敗: "${book.title}"。錯誤訊息：`, error.message);
+      console.error(`新增失敗: "${cleanTitle}"。錯誤訊息：`, error.message);
     } else {
       count++;
-      console.log(`[成功] (${count}/30) 已寫入: ${book.title}`);
+      console.log(`[成功] (${count}/30) 已寫入: ${cleanTitle}`);
     }
   }
 

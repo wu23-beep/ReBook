@@ -13,7 +13,16 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// Helper function to clean search terms (remove Chinese brackets and notes)
+// Helper function to remove parentheses containing Chinese characters
+function removeChineseParentheses(title) {
+  return title
+    .replace(/\([^)]*[\u4e00-\u9fa5]+[^)]*\)/g, "") // 移除包含中文的半形括號
+    .replace(/（[^）]*[\u4e00-\u9fa5]+[^）]*）/g, "") // 移除包含中文的全形括號
+    .replace(/\s+/g, " ") // 合併多個空格
+    .trim();
+}
+
+// Helper function to clean search terms (remove edition tags and punctuation for search query)
 function getSearchQuery(title, author) {
   let cleanTitle = title
     .replace(/\(.*?\)/g, "")
@@ -31,20 +40,36 @@ function getSearchQuery(title, author) {
   return { cleanTitle, cleanAuthor };
 }
 
+// Fetch cover, filtering by title relevance and sorting by latest publish year
 async function fetchCorrectCoverUrl(title, author) {
   const { cleanTitle, cleanAuthor } = getSearchQuery(title, author);
   const query = `${cleanTitle} ${cleanAuthor}`.trim();
-  const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=3`;
+  const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=10`;
   
   try {
     const res = await fetch(url);
     const data = await res.json();
     
     if (data.docs && data.docs.length > 0) {
-      for (const doc of data.docs) {
-        if (doc.cover_i) {
-          return `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg`;
-        }
+      // Filter by title match
+      const matchedDocs = data.docs.filter(doc => {
+        if (!doc.cover_i) return false;
+        const docTitle = doc.title.toLowerCase();
+        const searchTitle = cleanTitle.toLowerCase();
+        return docTitle.includes(searchTitle) || searchTitle.includes(docTitle);
+      });
+      
+      const docsToSort = matchedDocs.length > 0 ? matchedDocs : data.docs.filter(doc => doc.cover_i);
+      
+      // Sort by publish year (descending) to get the latest edition
+      const sorted = docsToSort.sort((a, b) => {
+        const yearA = a.publish_year ? Math.max(...a.publish_year) : (a.first_publish_year || 0);
+        const yearB = b.publish_year ? Math.max(...b.publish_year) : (b.first_publish_year || 0);
+        return yearB - yearA;
+      });
+      
+      if (sorted.length > 0 && sorted[0].cover_i) {
+        return `https://covers.openlibrary.org/b/id/${sorted[0].cover_i}-L.jpg`;
       }
     }
   } catch (err) {
@@ -52,15 +77,28 @@ async function fetchCorrectCoverUrl(title, author) {
   }
   
   // Fallback: title search only
-  const fallbackUrl = `https://openlibrary.org/search.json?title=${encodeURIComponent(cleanTitle)}&limit=3`;
+  const fallbackUrl = `https://openlibrary.org/search.json?title=${encodeURIComponent(cleanTitle)}&limit=10`;
   try {
     const res = await fetch(fallbackUrl);
     const data = await res.json();
     if (data.docs && data.docs.length > 0) {
-      for (const doc of data.docs) {
-        if (doc.cover_i) {
-          return `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg`;
-        }
+      const matchedDocs = data.docs.filter(doc => {
+        if (!doc.cover_i) return false;
+        const docTitle = doc.title.toLowerCase();
+        const searchTitle = cleanTitle.toLowerCase();
+        return docTitle.includes(searchTitle) || searchTitle.includes(docTitle);
+      });
+      
+      const docsToSort = matchedDocs.length > 0 ? matchedDocs : data.docs.filter(doc => doc.cover_i);
+      
+      const sorted = docsToSort.sort((a, b) => {
+        const yearA = a.publish_year ? Math.max(...a.publish_year) : (a.first_publish_year || 0);
+        const yearB = b.publish_year ? Math.max(...b.publish_year) : (b.first_publish_year || 0);
+        return yearB - yearA;
+      });
+      
+      if (sorted.length > 0 && sorted[0].cover_i) {
+        return `https://covers.openlibrary.org/b/id/${sorted[0].cover_i}-L.jpg`;
       }
     }
   } catch (err) {
@@ -71,7 +109,7 @@ async function fetchCorrectCoverUrl(title, author) {
 }
 
 async function startUpdating() {
-  console.log("正在從 Supabase 獲取所有書籍以更新正確封面...");
+  console.log("正在從 Supabase 獲取所有書籍以清理書名與更新最新封面...");
   
   const { data: books, error } = await supabase
     .from("books")
@@ -82,35 +120,37 @@ async function startUpdating() {
     process.exit(1);
   }
   
-  console.log(`共讀取到 ${books.length} 筆書籍。準備開始查詢正確封面...`);
+  console.log(`共讀取到 ${books.length} 筆書籍。準備開始清理書名並查詢最新封面...`);
   let updatedCount = 0;
   
   for (const book of books) {
-    const correctCover = await fetchCorrectCoverUrl(book.title, book.author);
+    const cleanTitle = removeChineseParentheses(book.title);
+    const correctCover = await fetchCorrectCoverUrl(cleanTitle, book.author);
     
+    const updateData = { title: cleanTitle };
     if (correctCover) {
-      // Update Supabase
-      const { error: updateErr } = await supabase
-        .from("books")
-        .update({ cover_url: correctCover })
-        .eq("id", book.id);
-        
-      if (updateErr) {
-        console.error(`更新資料庫失敗 [${book.title}]:`, updateErr.message);
-      } else {
-        updatedCount++;
-        console.log(`[更新成功] (${updatedCount}) 已為「${book.title}」套用真實封面：`);
-        console.log(`   └─ ${correctCover}`);
-      }
-    } else {
-      console.log(`[跳過/未找到]「${book.title}」未在 Google Books 找到適用封面，保留原圖。`);
+      updateData.cover_url = correctCover;
     }
     
-    // Add small delay to avoid Google API rate limits
+    // Update Supabase
+    const { error: updateErr } = await supabase
+      .from("books")
+      .update(updateData)
+      .eq("id", book.id);
+      
+    if (updateErr) {
+      console.error(`更新資料庫失敗 [${book.title}]:`, updateErr.message);
+    } else {
+      updatedCount++;
+      const coverMsg = correctCover ? `並套用新版封面：\n   └─ ${correctCover}` : "（封面維持原樣）";
+      console.log(`[更新成功] (${updatedCount}) 已清理書名為「${cleanTitle}」${coverMsg}`);
+    }
+    
+    // Add small delay to avoid Open Library rate limits
     await new Promise(resolve => setTimeout(resolve, 300));
   }
   
-  console.log(`\n🎉 封面更新完畢！共成功更新 ${updatedCount} 筆書籍封面圖。`);
+  console.log(`\n🎉 書名清理與封面更新完畢！共成功更新 ${updatedCount} 筆書籍。`);
   process.exit(0);
 }
 
