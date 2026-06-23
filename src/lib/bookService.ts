@@ -27,6 +27,10 @@ export interface DatabaseBookRow {
 }
 
 export function mapRowToBook(row: DatabaseBookRow): Book {
+  let coverUrl = row.cover_url;
+  if (coverUrl && coverUrl.includes("openlibrary.org")) {
+    coverUrl = `https://images.weserv.nl/?url=${encodeURIComponent(coverUrl)}`;
+  }
   return {
     id: row.id,
     title: row.title,
@@ -39,7 +43,7 @@ export function mapRowToBook(row: DatabaseBookRow): Book {
     school: row.school,
     professor: row.professor,
     location: row.location,
-    coverUrl: row.cover_url,
+    coverUrl: coverUrl,
     ownerId: row.owner_id,
     ownerName: row.owner_name || undefined,
     ownerAvatarUrl: row.owner_avatar_url || undefined,
@@ -55,6 +59,13 @@ export function mapRowToBook(row: DatabaseBookRow): Book {
 }
 
 export function mapBookToRow(book: Omit<Book, "id"> & { id?: string }): Omit<DatabaseBookRow, "created_at"> {
+  let cleanCoverUrl = book.coverUrl;
+  if (cleanCoverUrl && cleanCoverUrl.includes("images.weserv.nl/?url=")) {
+    const parts = cleanCoverUrl.split("images.weserv.nl/?url=");
+    if (parts.length > 1) {
+      cleanCoverUrl = decodeURIComponent(parts[1]);
+    }
+  }
   return {
     id: book.id || "", // Supabase will auto generate if empty string, or we can omit it if it's new
     title: book.title,
@@ -67,7 +78,7 @@ export function mapBookToRow(book: Omit<Book, "id"> & { id?: string }): Omit<Dat
     school: book.school,
     professor: book.professor,
     location: book.location,
-    cover_url: book.coverUrl,
+    cover_url: cleanCoverUrl,
     owner_id: book.ownerId,
     owner_name: book.ownerName || null,
     owner_avatar_url: book.ownerAvatarUrl || null,
