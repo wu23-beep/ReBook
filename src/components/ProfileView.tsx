@@ -109,7 +109,7 @@ export default function ProfileView({
               className="mt-6 w-full py-2.5 bg-secondary text-background hover:brightness-110 rounded-xl font-sans text-xs font-semibold tracking-wide cursor-pointer transition-all flex items-center justify-center gap-1.5"
             >
               <span className="material-symbols-outlined text-sm">bookmark_add</span>
-              新增至追蹤清單
+              新增圖書到追蹤清單
             </button>
 
           </div>
