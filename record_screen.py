@@ -225,7 +225,7 @@ def apply_subtitles_and_audio():
         print(f"BGM download failed: {e}. Video will only have narration.")
         
     # Delay imports to avoid early failures
-    from moviepy import VideoFileClip, AudioFileClip, CompositeAudioClip
+    from moviepy import VideoFileClip, AudioFileClip, CompositeAudioClip, concatenate_audioclips, AudioClip
     
     print("Loading video recording clip...")
     raw_video = VideoFileClip(webm_file)
@@ -278,14 +278,30 @@ def apply_subtitles_and_audio():
     print("Applying subtitle overlays to video...")
     processed_video = raw_video.transform(lambda get_frame, t: draw_subtitle_frame(get_frame(t), t))
     
-    # Load and position audio tracks
-    print("Assembling audio tracks...")
-    audio_clips = []
-    for start_time, audio_file in audio_tracks:
-        clip = AudioFileClip(audio_file)
-        clip = clip.with_start(start_time)
-        audio_clips.append(clip)
+    # Load and position audio tracks sequentially with silence clips
+    print("Assembling audio tracks with silence padding...")
+    narration_clips = []
+    for idx, scene in enumerate(timeline):
+        audio_file = audio_tracks[idx][1]
+        tts_clip = AudioFileClip(audio_file)
+        tts_len = tts_clip.duration
+        scene_duration = scene["end"] - scene["start"]
         
+        # Add the narration segment
+        narration_clips.append(tts_clip)
+        
+        # Add silence padding to fill the scene duration
+        silence_len = scene_duration - tts_len
+        if silence_len > 0:
+            # Create silence clip
+            silence_clip = AudioClip(lambda t: 0.0, duration=silence_len, fps=44100)
+            narration_clips.append(silence_clip)
+        else:
+            print(f"Warning: Scene {idx} narration ({tts_len:.2f}s) is longer than scene duration ({scene_duration:.2f}s)!")
+            
+    # Concatenate all to make a single non-overlapping narration track
+    narration_audio = concatenate_audioclips(narration_clips)
+    
     # BGM mixing
     if bgm_downloaded:
         try:
@@ -293,13 +309,16 @@ def apply_subtitles_and_audio():
             # Loop/trim BGM to match final duration and set low volume
             bgm = bgm.with_duration(55.0)
             bgm = bgm.multiply_volume(0.12)
-            audio_clips.append(bgm)
+            
+            # Mix BGM with the clean narration track
+            mixed_audio = CompositeAudioClip([narration_audio, bgm])
+            processed_video = processed_video.with_audio(mixed_audio)
+            print("BGM mixed with narration successfully.")
         except Exception as e:
             print("Could not mix BGM:", e)
-            
-    # Mix all audio clips together
-    mixed_audio = CompositeAudioClip(audio_clips)
-    processed_video = processed_video.with_audio(mixed_audio)
+            processed_video = processed_video.with_audio(narration_audio)
+    else:
+        processed_video = processed_video.with_audio(narration_audio)
     
     # Write the compiled output file
     print(f"Compiling and writing final video to {output_video_path}...")
@@ -316,7 +335,11 @@ def apply_subtitles_and_audio():
     print(f"Video saved at: {output_video_path}")
 
 async def main():
-    await record_browser_session()
+    video_files = glob.glob(os.path.join(temp_video_dir, "*.webm"))
+    if video_files:
+        print("Found existing browser recording, skipping Playwright session to save time...")
+    else:
+        await record_browser_session()
     apply_subtitles_and_audio()
 
 if __name__ == "__main__":
