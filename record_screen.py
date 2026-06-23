@@ -451,12 +451,7 @@ def apply_subtitles_and_audio():
     for idx, scene in enumerate(timeline):
         audio_file = audio_tracks[idx][1]
         tts_clip = AudioFileClip(audio_file)
-        # Trim 1.0 second from the end to remove gTTS trailing silence
-        tts_len = max(0.5, tts_clip.duration - 1.0)
-        if hasattr(tts_clip, "subclip"):
-            tts_clip = tts_clip.subclip(0, tts_len)
-        else:
-            tts_clip = tts_clip.subclipped(0, tts_len)
+        tts_len = tts_clip.duration
         scene_duration = scene["end"] - scene["start"]
         
         narration_clips.append(tts_clip)
@@ -511,11 +506,10 @@ async def main():
         generate_voiceover(scene["narration"], audio_path, speed=VOICEOVER_SPEED)
         from moviepy import AudioFileClip
         clip = AudioFileClip(audio_path)
-        # Measure duration minus the 1.0 second trailing silence we will trim
-        dur = max(1.0, clip.duration - 1.0)
+        dur = clip.duration
         clip.close()
         tts_durations.append(dur)
-        print(f"Scene {idx} TTS duration (trimmed): {dur:.2f}s")
+        print(f"Scene {idx} TTS duration: {dur:.2f}s")
         
     print("Forcing browser re-record to sync text and actions with robust selectors...")
     await record_browser_session(tts_durations)
