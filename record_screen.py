@@ -34,7 +34,7 @@ scene_contents = [
         "narration": "內建即時通訊，能直接發送快捷語與書況照片，雙方隨時敲定面交時間。"
     },
     {
-        "narration": "在個人書櫃中，你可以輕鬆管理所有已上架、借入與借出的書籍資產。"
+        "narration": "在個人書櫃中，你可以輕鬆管理所有已上架與交易成功的書籍。"
     },
     {
         "narration": "獨家的 AI 學術小助手，結合了語意搜尋，直接詢問教授與課程，一鍵為你推薦最新版本教科書。"
@@ -96,7 +96,8 @@ async def record_browser_session(tts_durations):
         t_start = time.time() - script_start_time
         print("Filtering by Computer Science department using select option...")
         try:
-            await page.select_option('aside select:nth-of-type(2)', value="Computer Science", timeout=3000)
+            # Use specific nth(1) locator for the second select sibling
+            await page.locator('aside select').nth(1).select_option(value="Computer Science", timeout=3000)
             await page.wait_for_timeout(500)
             await page.click('button:has-text("套用篩選")', timeout=3000)
         except Exception as e:
@@ -217,11 +218,11 @@ async def record_browser_session(tts_durations):
             print("Could not click My Shelf tab, continuing...", e)
         await page.wait_for_timeout(1000)
         
-        try:
-            await page.click('text="我借出的書"', timeout=3000)
-        except Exception as e:
-            pass
+        # Just scroll My Shelf view without clicking missing buttons
+        await page.mouse.wheel(0, 200)
         await page.wait_for_timeout(1000)
+        await page.mouse.wheel(0, -200)
+        await page.wait_for_timeout(500)
         
         # Match duration
         actions_dur = (time.time() - script_start_time) - t_start
@@ -246,10 +247,11 @@ async def record_browser_session(tts_durations):
             print("Could not open AI Assistant, continuing...", e)
         await page.wait_for_timeout(1000)
         
-        print("Asking AI assistant for 'Computer Organization' book...")
+        print("Asking AI assistant for 'Computer Science Algorithms' book...")
         try:
             await page.click('input[placeholder="問問 AI 課本助理..."]', timeout=3000)
-            await page.type('input[placeholder="問問 AI 課本助理..."]', '有沒有雷欽隆教授的計算機組織？', delay=60)
+            # Query containing "資工" and "演算法" to guarantee local search matching
+            await page.type('input[placeholder="問問 AI 課本助理..."]', '有沒有資工系的演算法課本？', delay=60)
             await page.wait_for_timeout(500)
             await page.press('input[placeholder="問問 AI 課本助理..."]', 'Enter')
         except Exception as e:
@@ -449,7 +451,12 @@ def apply_subtitles_and_audio():
     for idx, scene in enumerate(timeline):
         audio_file = audio_tracks[idx][1]
         tts_clip = AudioFileClip(audio_file)
-        tts_len = tts_clip.duration
+        # Trim 1.0 second from the end to remove gTTS trailing silence
+        tts_len = max(0.5, tts_clip.duration - 1.0)
+        if hasattr(tts_clip, "subclip"):
+            tts_clip = tts_clip.subclip(0, tts_len)
+        else:
+            tts_clip = tts_clip.subclipped(0, tts_len)
         scene_duration = scene["end"] - scene["start"]
         
         narration_clips.append(tts_clip)
@@ -467,7 +474,11 @@ def apply_subtitles_and_audio():
         try:
             bgm = AudioFileClip(bgm_path)
             bgm = bgm.with_duration(final_duration)
-            bgm = bgm.multiply_volume(0.12)
+            # Universal volume scaling support for both moviepy 1.x and 2.x
+            if hasattr(bgm, "multiply_volume"):
+                bgm = bgm.multiply_volume(0.12)
+            else:
+                bgm = bgm.volumex(0.12)
             
             mixed_audio = CompositeAudioClip([narration_audio, bgm])
             processed_video = processed_video.with_audio(mixed_audio)
@@ -500,10 +511,11 @@ async def main():
         generate_voiceover(scene["narration"], audio_path, speed=VOICEOVER_SPEED)
         from moviepy import AudioFileClip
         clip = AudioFileClip(audio_path)
-        dur = clip.duration
+        # Measure duration minus the 1.0 second trailing silence we will trim
+        dur = max(1.0, clip.duration - 1.0)
         clip.close()
         tts_durations.append(dur)
-        print(f"Scene {idx} TTS duration: {dur:.2f}s")
+        print(f"Scene {idx} TTS duration (trimmed): {dur:.2f}s")
         
     print("Forcing browser re-record to sync text and actions with robust selectors...")
     await record_browser_session(tts_durations)
