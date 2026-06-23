@@ -10,9 +10,18 @@ import { MOCK_WISHLIST } from "../data";
 interface ProfileViewProps {
   onSearchFilterApply?: (field: string, value: string) => void;
   onSelectBookByTitle?: (title: string) => void;
+  favorites?: Book[];
+  onToggleFavorite?: (book: Book) => void;
+  onSelectBook?: (book: Book) => void;
 }
 
-export default function ProfileView({ onSearchFilterApply, onSelectBookByTitle }: ProfileViewProps) {
+export default function ProfileView({ 
+  onSearchFilterApply, 
+  onSelectBookByTitle,
+  favorites = [],
+  onToggleFavorite,
+  onSelectBook
+}: ProfileViewProps) {
   const [activeSubTab, setActiveSubTab] = useState<"wishlist" | "alerts" | "settings">("wishlist");
 
   // Wishlist item state (to support toggles)
@@ -219,6 +228,49 @@ export default function ProfileView({ onSearchFilterApply, onSelectBookByTitle }
 
               {/* Saved Books Grid list */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6" id="wishlist-book-grid">
+                {/* Real Favorited Books */}
+                {favorites.map((book) => (
+                  <div
+                    key={book.id}
+                    onClick={() => onSelectBook && onSelectBook(book)}
+                    className="bg-surface-container-lowest rounded-xl p-5 border border-outline-variant/15 shadow-sm group hover:shadow-[0_8px_30px_rgba(3,22,50,0.05)] transition-all duration-300 flex flex-col justify-between cursor-pointer"
+                  >
+                    <div>
+                      <div className="flex justify-between items-start gap-4">
+                        <div>
+                          <h3 className="font-serif text-base sm:text-lg text-primary font-bold tracking-tight line-clamp-2">{book.title}</h3>
+                          <p className="font-sans text-xs text-outline mt-1 italic">{book.author}</p>
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleFavorite && onToggleFavorite(book);
+                          }}
+                          className="bg-secondary-container/20 text-secondary p-2 rounded-full transition-colors cursor-pointer shrink-0 flex items-center justify-center hover:bg-tertiary-container/20"
+                          title="取消追蹤"
+                        >
+                          <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>favorite</span>
+                        </button>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2.5 my-4 select-none pt-3 border-t border-outline-variant/10">
+                        <div className="flex items-center gap-1 font-sans text-secondary">
+                          <span className="material-symbols-outlined text-base">notifications_active</span>
+                          <span className="text-[11px] font-bold">即時通知：開啟中</span>
+                        </div>
+                        
+                        <span className="text-[11px] text-outline italic">
+                          目前已上架
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="w-full text-center py-2.5 bg-secondary-container/20 hover:bg-secondary-container/30 text-secondary rounded-lg font-sans text-xs font-bold transition-all">
+                      查看書籍詳情
+                    </div>
+                  </div>
+                ))}
+
                 {wishlistItems.map((item) => (
                   <div
                     key={item.id}

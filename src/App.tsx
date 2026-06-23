@@ -93,6 +93,7 @@ export default function App({ demoScene = null }: AppProps) {
 
   // Global Database state
   const [books, setBooks] = useState<Book[]>([]);
+  const [favorites, setFavorites] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
@@ -266,6 +267,15 @@ export default function App({ demoScene = null }: AppProps) {
               book={selectedBook}
               onBack={() => setSelectedBook(null)}
               onStartChat={handleStartChatFromDetail}
+              isFavorited={favorites.some(b => b.id === selectedBook.id)}
+              onToggleFavorite={() => {
+                const exists = favorites.some(b => b.id === selectedBook.id);
+                if (exists) {
+                  setFavorites(favorites.filter(b => b.id !== selectedBook.id));
+                } else {
+                  setFavorites([...favorites, selectedBook]);
+                }
+              }}
             />
           );
         }
@@ -319,6 +329,21 @@ export default function App({ demoScene = null }: AppProps) {
         return (
           <ProfileView
             onSearchFilterApply={handleSearchFilterApply}
+            favorites={favorites}
+            onToggleFavorite={(book) => {
+              setFavorites(prev => {
+                const exists = prev.some(b => b.id === book.id);
+                if (exists) {
+                  return prev.filter(b => b.id !== book.id);
+                } else {
+                  return [...prev, book];
+                }
+              });
+            }}
+            onSelectBook={(book) => {
+              setSelectedBook(book);
+              setActiveTab("home");
+            }}
           />
         );
 

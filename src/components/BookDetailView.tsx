@@ -10,10 +10,17 @@ interface BookDetailViewProps {
   book: Book;
   onBack: () => void;
   onStartChat: (book: Book, initialMessage?: string) => void;
+  isFavorited?: boolean;
+  onToggleFavorite?: () => void;
 }
 
-export default function BookDetailView({ book, onBack, onStartChat }: BookDetailViewProps) {
-  const [isFavorited, setIsFavorited] = useState(false);
+export default function BookDetailView({ 
+  book, 
+  onBack, 
+  onStartChat,
+  isFavorited = false,
+  onToggleFavorite
+}: BookDetailViewProps) {
   const owner: OwnerProfile = {
     id: book.ownerId || "unknown",
     name: book.ownerName || "Independent Student",
@@ -222,8 +229,8 @@ export default function BookDetailView({ book, onBack, onStartChat }: BookDetail
               傳送交換訊息給 {owner.name.split(" ")[0]}
             </button>
             
-            <button
-              onClick={() => setIsFavorited(!isFavorited)}
+             <button
+              onClick={onToggleFavorite}
               className={`p-3.5 border rounded-xl flex items-center justify-center transition-colors cursor-pointer ${
                 isFavorited
                   ? "bg-tertiary-container/10 border-on-tertiary-container text-on-tertiary-container"
