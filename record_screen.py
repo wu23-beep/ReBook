@@ -2,6 +2,7 @@ import os
 import sys
 import glob
 import time
+import json
 import asyncio
 import urllib.request
 import numpy as np
@@ -14,49 +15,29 @@ temp_video_dir = os.path.join(scratch_dir, "raw_recordings")
 os.makedirs(temp_video_dir, exist_ok=True)
 
 output_video_path = r"C:\Users\tingl\Downloads\rebook-續頁\rebook_app_intro.mp4"
+timeline_cache_path = os.path.join(scratch_dir, "timeline_cache.json")
 
-# Timeline specifications for the 55-second demo
-timeline = [
+# Define the scene narration scripts (which will be both narration AND subtitles)
+scene_contents = [
     {
-        "start": 0.0,
-        "end": 7.0,
-        "subtitle": "ReBook 首頁 - 大學生專屬的校園二手教科書共享平台",
         "narration": "這是 ReBook 的首頁，我們可以流暢地探索各個校園中上架的二手教科書。"
     },
     {
-        "start": 7.0,
-        "end": 13.0,
-        "subtitle": "快捷系所篩選與搜尋，一鍵鎖定熱門指定課本",
         "narration": "平台支援快捷系所分類，輕輕一點，就能精準鎖定各系熱門教材。"
     },
     {
-        "start": 13.0,
-        "end": 20.0,
-        "subtitle": "透明書況、校園面交地點與書主信譽評等",
         "narration": "詳情頁標註了透明書況、校園面交地點以及書主評價，讓借閱面交更安心。"
     },
     {
-        "start": 20.0,
-        "end": 28.0,
-        "subtitle": "內建聊聊對話與預約卡片，輕鬆約定面交時間",
         "narration": "內建即時通訊，能直接發送快捷語與書況照片，雙方隨時敲定面交時間。"
     },
     {
-        "start": 28.0,
-        "end": 34.0,
-        "subtitle": "個人書架，輕鬆管理上架、借入與借出圖書",
         "narration": "在個人書櫃中，你可以輕鬆管理所有已上架、借入與借出的書籍資產。"
     },
     {
-        "start": 34.0,
-        "end": 48.0,
-        "subtitle": "獨家 AI 學術小助手 - 大綱比對與智慧書籍推薦",
         "narration": "獨家的 AI 學術小助手，結合了語意搜尋，直接詢問教授與課程，一鍵為你推薦最新版本教科書。"
     },
     {
-        "start": 48.0,
-        "end": 55.0,
-        "subtitle": "讓二手原文書在同校間循環傳承，開啟你的 ReBook 體驗！",
         "narration": "快來註冊 ReBook，開啟你的共享新體驗，讓知識在校園間永續流傳！"
     }
 ]
@@ -65,8 +46,10 @@ async def record_browser_session():
     print("Initializing Playwright browser in background...")
     from playwright.async_api import async_playwright
     
+    measured_timeline = []
+    script_start_time = time.time()
+    
     async with async_playwright() as p:
-        # Launch Chromium, using recordVideo setting in context
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context(
             viewport={"width": 1280, "height": 720},
@@ -78,21 +61,28 @@ async def record_browser_session():
         url = "https://re-book-wheat.vercel.app/"
         print(f"Loading target web application: {url}...")
         
-        # Step 1: Home View Navigation (0.0s - 7.0s)
+        # --- Step 1: Home View Navigation ---
+        t_start = time.time() - script_start_time
         await page.goto(url)
         await page.wait_for_timeout(2000)
         
         print("Scrolling Home Page to view textbooks...")
-        # Scroll down to show books
         await page.mouse.wheel(0, 350)
         await page.wait_for_timeout(1500)
         await page.mouse.wheel(0, 350)
         await page.wait_for_timeout(1500)
-        # Scroll back up
         await page.mouse.wheel(0, -700)
-        await page.wait_for_timeout(2000) # Ends at 7.0s
+        await page.wait_for_timeout(2000)
+        t_end = time.time() - script_start_time
+        measured_timeline.append({
+            "start": t_start,
+            "end": t_end,
+            "subtitle": scene_contents[0]["narration"],
+            "narration": scene_contents[0]["narration"]
+        })
         
-        # Step 2: Department Filter & Click Book (7.0s - 13.0s)
+        # --- Step 2: Department Filter & Click Book ---
+        t_start = time.time() - script_start_time
         print("Filtering by Computer Science department using select option...")
         try:
             await page.select_option('div.space-y-1:has-text("學門系所") select', value="Computer Science", timeout=3000)
@@ -106,14 +96,21 @@ async def record_browser_session():
         try:
             await page.locator('text=Operating System Concepts').first.click(timeout=3000)
         except Exception as e:
-            # Fallback click the first card using shadow class
             try:
                 await page.locator('.book-card-shadow').first.click(timeout=3000)
             except Exception as fe:
                 print("Could not click book card, continuing...", fe)
-        await page.wait_for_timeout(4000) # Ends at 13.0s
+        await page.wait_for_timeout(4000)
+        t_end = time.time() - script_start_time
+        measured_timeline.append({
+            "start": t_start,
+            "end": t_end,
+            "subtitle": scene_contents[1]["narration"],
+            "narration": scene_contents[1]["narration"]
+        })
         
-        # Step 3: Book Details & Contact Owner (13.0s - 20.0s)
+        # --- Step 3: Book Details & Contact Owner ---
+        t_start = time.time() - script_start_time
         print("Scrolling through book details page...")
         await page.mouse.wheel(0, 450)
         await page.wait_for_timeout(2500)
@@ -123,21 +120,36 @@ async def record_browser_session():
             await page.click('button:has-text("傳送交換訊息")', timeout=3000)
         except Exception as e:
             print("Could not click contact button, continuing...", e)
-        await page.wait_for_timeout(4500) # Ends at 20.0s (13 + 2.5 + 4.5)
+        await page.wait_for_timeout(4500)
+        t_end = time.time() - script_start_time
+        measured_timeline.append({
+            "start": t_start,
+            "end": t_end,
+            "subtitle": scene_contents[2]["narration"],
+            "narration": scene_contents[2]["narration"]
+        })
         
-        # Step 4: Chat Room (20.0s - 28.0s)
+        # --- Step 4: Chat Room ---
+        t_start = time.time() - script_start_time
         print("Interacting inside the Chat Room...")
         try:
-            # Type message
             await page.click('input[placeholder="輸入訊息對話..."]', timeout=3000)
             await page.type('input[placeholder="輸入訊息對話..."]', '請問這本書目前還在嗎？', delay=80)
             await page.wait_for_timeout(1000)
             await page.press('input[placeholder="輸入訊息對話..."]', 'Enter')
         except Exception as e:
             print("Could not type in chat input, continuing...", e)
-        await page.wait_for_timeout(7000) # Ends at 28.0s (20 + 1 + 7)
+        await page.wait_for_timeout(7000)
+        t_end = time.time() - script_start_time
+        measured_timeline.append({
+            "start": t_start,
+            "end": t_end,
+            "subtitle": scene_contents[3]["narration"],
+            "narration": scene_contents[3]["narration"]
+        })
         
-        # Step 5: My Shelf (28.0s - 34.0s)
+        # --- Step 5: My Shelf ---
+        t_start = time.time() - script_start_time
         print("Navigating to 'My Shelf' tab...")
         try:
             await page.click('text="我的書架"', timeout=3000)
@@ -148,9 +160,17 @@ async def record_browser_session():
             await page.click('text="我借出的書"', timeout=3000)
         except Exception as e:
             pass
-        await page.wait_for_timeout(3000) # Ends at 34.0s (28 + 3 + 3)
+        await page.wait_for_timeout(3000)
+        t_end = time.time() - script_start_time
+        measured_timeline.append({
+            "start": t_start,
+            "end": t_end,
+            "subtitle": scene_contents[4]["narration"],
+            "narration": scene_contents[4]["narration"]
+        })
         
-        # Step 6: Summon AI Assistant (34.0s - 48.0s)
+        # --- Step 6: Summon AI Assistant ---
+        t_start = time.time() - script_start_time
         print("Summoning AI Academic Assistant sidebar...")
         try:
             await page.click('button[title="AI 學術小助手"]', timeout=3000)
@@ -166,7 +186,6 @@ async def record_browser_session():
             await page.press('input[placeholder="問問 AI 課本助理..."]', 'Enter')
         except Exception as e:
             print("Could not type in AI chat, continuing...", e)
-        # Wait for AI response
         await page.wait_for_timeout(5500)
         
         print("Clicking AI recommendation card...")
@@ -174,33 +193,69 @@ async def record_browser_session():
             await page.locator('text=Computer Organization and Design').first.click(timeout=3000)
         except Exception as e:
             print("Could not click AI recommendation card, continuing...", e)
-        await page.wait_for_timeout(5000) # Ends at 48.0s (34 + 2.5 + 1 + 5.5 + 5)
+        await page.wait_for_timeout(5000)
+        t_end = time.time() - script_start_time
+        measured_timeline.append({
+            "start": t_start,
+            "end": t_end,
+            "subtitle": scene_contents[5]["narration"],
+            "narration": scene_contents[5]["narration"]
+        })
         
-        # Step 7: Profile View & Outro (48.0s - 55.0s)
+        # --- Step 7: Profile View & Outro ---
+        t_start = time.time() - script_start_time
         print("Navigating to Profile Account View...")
         try:
             await page.click('text="帳號檔案"', timeout=3000)
         except Exception as e:
             print("Could not click Profile tab, continuing...", e)
-        await page.wait_for_timeout(7000) # Ends at 55.0s (48 + 7)
+        await page.wait_for_timeout(7000)
+        t_end = time.time() - script_start_time
+        measured_timeline.append({
+            "start": t_start,
+            "end": t_end,
+            "subtitle": scene_contents[6]["narration"],
+            "narration": scene_contents[6]["narration"]
+        })
         
         print("Closing Playwright context...")
         await context.close()
         await browser.close()
         
     print("Browser recording complete!")
+    
+    # Save the measured timeline to cache
+    with open(timeline_cache_path, "w", encoding="utf-8") as f:
+        json.dump(measured_timeline, f, ensure_ascii=False, indent=2)
+    print("Measured timeline saved to cache.")
+
+def wrap_text(text, max_len=22):
+    """Wrap subtitle text into multiline if it exceeds max_len characters."""
+    if len(text) <= max_len:
+        return text
+    lines = []
+    for i in range(0, len(text), max_len):
+        lines.append(text[i:i+max_len])
+    return "\n".join(lines)
 
 def apply_subtitles_and_audio():
     print("Locating the recorded WebM file...")
-    # Playwright saves video as random filename under the folder
     video_files = glob.glob(os.path.join(temp_video_dir, "*.webm"))
     if not video_files:
         print("Error: No recorded webm file found!")
         sys.exit(1)
         
-    # Get the latest webm file
     webm_file = max(video_files, key=os.path.getmtime)
     print(f"Found recording file: {webm_file}")
+    
+    # Load timeline from cache
+    if not os.path.exists(timeline_cache_path):
+        print("Error: Timeline cache file missing. Please record again.")
+        sys.exit(1)
+        
+    with open(timeline_cache_path, "r", encoding="utf-8") as f:
+        timeline = json.load(f)
+    print("Timeline successfully loaded from cache.")
     
     # Generate narration audio files
     print("Generating TTS voiceover tracks...")
@@ -215,7 +270,6 @@ def apply_subtitles_and_audio():
     bgm_path = os.path.join(scratch_dir, "intro_bgm.mp3")
     bgm_downloaded = False
     try:
-        # Acoustic corporate upbeat loop
         bgm_url = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3"
         print("Downloading BGM...")
         urllib.request.urlretrieve(bgm_url, bgm_path)
@@ -229,8 +283,9 @@ def apply_subtitles_and_audio():
     
     print("Loading video recording clip...")
     raw_video = VideoFileClip(webm_file)
-    # Ensure video is exactly 55 seconds (trim/extend if needed)
-    raw_video = raw_video.with_duration(55.0)
+    final_duration = timeline[-1]["end"]
+    print(f"Trimming video clip to measured duration: {final_duration:.2f}s")
+    raw_video = raw_video.with_duration(final_duration)
     
     # Image frame processor to draw custom subtitles
     print("Compiling Pillow subtitle processor...")
@@ -247,8 +302,17 @@ def apply_subtitles_and_audio():
                 
         if current_sub:
             draw = ImageDraw.Draw(img, "RGBA")
+            
+            # Wrap text to support multiple lines
+            wrapped_text = wrap_text(current_sub, max_len=24)
+            lines_count = len(wrapped_text.split("\n"))
+            
+            # Calculate dynamic box height based on lines count
+            box_height = 80 if lines_count == 1 else 115
+            box_top = 720 - box_height - 15
+            
             # Bottom subtitle bar (semi-transparent black)
-            draw.rectangle([(0, 620), (1280, 710)], fill=(0, 0, 0, 175))
+            draw.rectangle([(0, box_top), (1280, 705)], fill=(0, 0, 0, 185))
             
             # Load font
             try:
@@ -259,22 +323,23 @@ def apply_subtitles_and_audio():
                 except:
                     font = ImageFont.load_default()
                     
-            # Center alignment
+            # Draw multi-line text centered
             try:
-                text_bbox = draw.textbbox((0, 0), current_sub, font=font)
+                text_bbox = draw.multiline_textbbox((0, 0), wrapped_text, font=font)
                 text_width = text_bbox[2] - text_bbox[0]
                 text_height = text_bbox[3] - text_bbox[1]
             except:
-                text_width = draw.textlength(current_sub, font=font)
-                text_height = 26
+                text_width = draw.textlength(wrapped_text.split("\n")[0], font=font)
+                text_height = 26 * lines_count
                 
             text_x = (1280 - text_width) // 2
-            text_y = 620 + (90 - text_height) // 2
-            draw.text((text_x, text_y), current_sub, fill=(255, 255, 255, 255), font=font)
+            text_y = box_top + (box_height - text_height) // 2 - 5
+            
+            draw.multiline_text((text_x, text_y), wrapped_text, fill=(255, 255, 255, 255), font=font, align="center")
             
         return np.array(img)
         
-    # Apply Pillow transformation on video frames using transform to ensure compatibility
+    # Apply Pillow transformation on video frames
     print("Applying subtitle overlays to video...")
     processed_video = raw_video.transform(lambda get_frame, t: draw_subtitle_frame(get_frame(t), t))
     
@@ -306,8 +371,7 @@ def apply_subtitles_and_audio():
     if bgm_downloaded:
         try:
             bgm = AudioFileClip(bgm_path)
-            # Loop/trim BGM to match final duration and set low volume
-            bgm = bgm.with_duration(55.0)
+            bgm = bgm.with_duration(final_duration)
             bgm = bgm.multiply_volume(0.12)
             
             # Mix BGM with the clean narration track
@@ -335,11 +399,11 @@ def apply_subtitles_and_audio():
     print(f"Video saved at: {output_video_path}")
 
 async def main():
-    video_files = glob.glob(os.path.join(temp_video_dir, "*.webm"))
-    if video_files:
-        print("Found existing browser recording, skipping Playwright session to save time...")
-    else:
-        await record_browser_session()
+    # If cache exists, we can still choose to force a re-record to measure dynamic timelines
+    # Since Vercel speeds can vary, re-recording ensures we capture the exact frame timestamps
+    # we will force a re-record here to guarantee the sync matches the new subtitles!
+    print("Forcing browser re-record to sync text and actions...")
+    await record_browser_session()
     apply_subtitles_and_audio()
 
 if __name__ == "__main__":
