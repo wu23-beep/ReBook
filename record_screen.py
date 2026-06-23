@@ -4,10 +4,12 @@ import glob
 import time
 import json
 import asyncio
+import subprocess
 import urllib.request
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 from gtts import gTTS
+from imageio_ffmpeg import get_ffmpeg_exe
 
 # Create directories
 scratch_dir = r"C:\Users\tingl\.gemini\antigravity\brain\80c92507-1316-440a-8307-f4a8405e44a2\scratch"
@@ -64,7 +66,10 @@ async def record_browser_session():
         # --- Step 1: Home View Navigation ---
         t_start = time.time() - script_start_time
         await page.goto(url)
-        await page.wait_for_timeout(2000)
+        # Wait for book cards to load first (ensure database connections are ready)
+        print("Waiting for book cards to load...")
+        await page.wait_for_selector('.book-card-shadow', timeout=10000)
+        await page.wait_for_timeout(1000)
         
         print("Scrolling Home Page to view textbooks...")
         await page.mouse.wheel(0, 350)
@@ -85,22 +90,28 @@ async def record_browser_session():
         t_start = time.time() - script_start_time
         print("Filtering by Computer Science department using select option...")
         try:
-            await page.select_option('div.space-y-1:has-text("學門系所") select', value="Computer Science", timeout=3000)
+            # Locate the 2nd select element (department) inside aside
+            await page.select_option('aside select:nth-of-type(2)', value="Computer Science", timeout=3000)
             await page.wait_for_timeout(500)
             await page.click('button:has-text("套用篩選")', timeout=3000)
         except Exception as e:
-            print("Could not apply department filter, continuing...", e)
-        await page.wait_for_timeout(1500)
-        
-        print("Clicking 'Operating System Concepts' book to view details...")
-        try:
-            await page.locator('text=Operating System Concepts').first.click(timeout=3000)
-        except Exception as e:
+            print("Could not apply department filter, trying fallback select...", e)
             try:
-                await page.locator('.book-card-shadow').first.click(timeout=3000)
+                await page.select_option('select >> xpath=ancestor::div[contains(., "學門系所")]', value="Computer Science", timeout=3000)
+                await page.click('button:has-text("套用篩選")', timeout=3000)
             except Exception as fe:
-                print("Could not click book card, continuing...", fe)
-        await page.wait_for_timeout(4000)
+                print("Fallback filter failed too, continuing...", fe)
+        await page.wait_for_timeout(2000)
+        
+        print("Clicking first book card to view details...")
+        try:
+            # Click first book card shadow which is 100% stable
+            await page.locator('.book-card-shadow').first.click(timeout=5000)
+        except Exception as e:
+            print("Could not click first book card, continuing...", e)
+        # Wait for details view to fully mount
+        await page.wait_for_selector('button:has-text("傳送交換訊息")', timeout=6000)
+        await page.wait_for_timeout(1500)
         t_end = time.time() - script_start_time
         measured_timeline.append({
             "start": t_start,
@@ -120,7 +131,12 @@ async def record_browser_session():
             await page.click('button:has-text("傳送交換訊息")', timeout=3000)
         except Exception as e:
             print("Could not click contact button, continuing...", e)
-        await page.wait_for_timeout(4500)
+        # Wait for chat view input to load
+        try:
+            await page.wait_for_selector('input[placeholder="輸入訊息對話..."]', timeout=6000)
+        except:
+            pass
+        await page.wait_for_timeout(2500)
         t_end = time.time() - script_start_time
         measured_timeline.append({
             "start": t_start,
@@ -152,7 +168,7 @@ async def record_browser_session():
         t_start = time.time() - script_start_time
         print("Navigating to 'My Shelf' tab...")
         try:
-            await page.click('text="我的書架"', timeout=3000)
+            await page.click('text="我的書架"', timeout=4000)
         except Exception as e:
             print("Could not click My Shelf tab, continuing...", e)
         await page.wait_for_timeout(3000)
@@ -186,13 +202,19 @@ async def record_browser_session():
             await page.press('input[placeholder="問問 AI 課本助理..."]', 'Enter')
         except Exception as e:
             print("Could not type in AI chat, continuing...", e)
-        await page.wait_for_timeout(5500)
-        
-        print("Clicking AI recommendation card...")
+        # Wait for AI response cards to load
         try:
-            await page.locator('text=Computer Organization and Design').first.click(timeout=3000)
+            await page.wait_for_selector('button:has-text("規格細節")', timeout=8000)
+        except:
+            pass
+        await page.wait_for_timeout(2500)
+        
+        print("Clicking AI recommendation card details...")
+        try:
+            # Click details button inside AI result card
+            await page.locator('button:has-text("規格細節")').first.click(timeout=3000)
         except Exception as e:
-            print("Could not click AI recommendation card, continuing...", e)
+            print("Could not click AI details button, continuing...", e)
         await page.wait_for_timeout(5000)
         t_end = time.time() - script_start_time
         measured_timeline.append({
@@ -206,7 +228,7 @@ async def record_browser_session():
         t_start = time.time() - script_start_time
         print("Navigating to Profile Account View...")
         try:
-            await page.click('text="帳號檔案"', timeout=3000)
+            await page.click('text="帳號檔案"', timeout=4000)
         except Exception as e:
             print("Could not click Profile tab, continuing...", e)
         await page.wait_for_timeout(7000)
@@ -220,7 +242,7 @@ async def record_browser_session():
         
         print("Closing Playwright context...")
         await context.close()
-        await browser.close()
+        browser.close()
         
     print("Browser recording complete!")
     
@@ -237,6 +259,31 @@ def wrap_text(text, max_len=22):
     for i in range(0, len(text), max_len):
         lines.append(text[i:i+max_len])
     return "\n".join(lines)
+
+def generate_voiceover(text, output_path, speed=1.24):
+    """Generate TTS MP3 file and stretch/speed it up using ffmpeg atempo."""
+    print(f"Generating TTS voiceover (speed={speed}): '{text[:15]}...'")
+    temp_tts = output_path + ".temp.mp3"
+    
+    # Generate original slow TTS
+    tts = gTTS(text=text, lang='zh-tw')
+    tts.save(temp_tts)
+    
+    # Speed it up using FFmpeg atempo filter
+    ffmpeg_exe = get_ffmpeg_exe()
+    cmd = [
+        ffmpeg_exe,
+        "-y",
+        "-i", temp_tts,
+        "-filter:a", f"atempo={speed}",
+        output_path
+    ]
+    subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    
+    try:
+        os.remove(temp_tts)
+    except:
+        pass
 
 def apply_subtitles_and_audio():
     print("Locating the recorded WebM file...")
@@ -257,13 +304,12 @@ def apply_subtitles_and_audio():
         timeline = json.load(f)
     print("Timeline successfully loaded from cache.")
     
-    # Generate narration audio files
-    print("Generating TTS voiceover tracks...")
+    # Generate narration audio files with FASTER speed
+    print("Generating TTS voiceover tracks (speed = 1.24)...")
     audio_tracks = []
     for idx, scene in enumerate(timeline):
         audio_path = os.path.join(scratch_dir, f"scene_audio_{idx}.mp3")
-        tts = gTTS(text=scene["narration"], lang='zh-tw')
-        tts.save(audio_path)
+        generate_voiceover(scene["narration"], audio_path, speed=1.24)
         audio_tracks.append((scene["start"], audio_path))
         
     # Download background music
@@ -399,10 +445,7 @@ def apply_subtitles_and_audio():
     print(f"Video saved at: {output_video_path}")
 
 async def main():
-    # If cache exists, we can still choose to force a re-record to measure dynamic timelines
-    # Since Vercel speeds can vary, re-recording ensures we capture the exact frame timestamps
-    # we will force a re-record here to guarantee the sync matches the new subtitles!
-    print("Forcing browser re-record to sync text and actions...")
+    print("Forcing browser re-record to sync text and actions with robust selectors...")
     await record_browser_session()
     apply_subtitles_and_audio()
 
