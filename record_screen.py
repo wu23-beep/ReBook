@@ -44,7 +44,7 @@ scene_contents = [
     }
 ]
 
-async def record_browser_session():
+async def record_browser_session(tts_durations):
     print("Initializing Playwright browser in background...")
     from playwright.async_api import async_playwright
     
@@ -66,18 +66,24 @@ async def record_browser_session():
         # --- Step 1: Home View Navigation ---
         t_start = time.time() - script_start_time
         await page.goto(url)
-        # Wait for book cards to load first (ensure database connections are ready)
         print("Waiting for book cards to load...")
         await page.wait_for_selector('.book-card-shadow', timeout=10000)
-        await page.wait_for_timeout(1000)
+        await page.wait_for_timeout(500)
         
         print("Scrolling Home Page to view textbooks...")
         await page.mouse.wheel(0, 350)
-        await page.wait_for_timeout(1500)
+        await page.wait_for_timeout(1000)
         await page.mouse.wheel(0, 350)
-        await page.wait_for_timeout(1500)
+        await page.wait_for_timeout(1000)
         await page.mouse.wheel(0, -700)
-        await page.wait_for_timeout(2000)
+        await page.wait_for_timeout(1000)
+        
+        # Match duration
+        actions_dur = (time.time() - script_start_time) - t_start
+        target_dur = tts_durations[0]
+        if actions_dur < target_dur:
+            await page.wait_for_timeout(int((target_dur - actions_dur) * 1000))
+            
         t_end = time.time() - script_start_time
         measured_timeline.append({
             "start": t_start,
@@ -86,32 +92,26 @@ async def record_browser_session():
             "narration": scene_contents[0]["narration"]
         })
         
-        # --- Step 2: Department Filter & Click Book ---
+        # --- Step 2: Department Filter ---
         t_start = time.time() - script_start_time
         print("Filtering by Computer Science department using select option...")
         try:
-            # Locate the 2nd select element (department) inside aside
             await page.select_option('aside select:nth-of-type(2)', value="Computer Science", timeout=3000)
             await page.wait_for_timeout(500)
             await page.click('button:has-text("套用篩選")', timeout=3000)
         except Exception as e:
-            print("Could not apply department filter, trying fallback select...", e)
-            try:
-                await page.select_option('select >> xpath=ancestor::div[contains(., "學門系所")]', value="Computer Science", timeout=3000)
-                await page.click('button:has-text("套用篩選")', timeout=3000)
-            except Exception as fe:
-                print("Fallback filter failed too, continuing...", fe)
-        await page.wait_for_timeout(2000)
+            print("Could not apply department filter, trying fallback...", e)
+        await page.wait_for_timeout(1000)
+        # Scroll filtered results
+        await page.mouse.wheel(0, 200)
+        await page.wait_for_timeout(1000)
         
-        print("Clicking first book card to view details...")
-        try:
-            # Click first book card shadow which is 100% stable
-            await page.locator('.book-card-shadow').first.click(timeout=5000)
-        except Exception as e:
-            print("Could not click first book card, continuing...", e)
-        # Wait for details view to fully mount
-        await page.wait_for_selector('button:has-text("傳送交換訊息")', timeout=6000)
-        await page.wait_for_timeout(1500)
+        # Match duration
+        actions_dur = (time.time() - script_start_time) - t_start
+        target_dur = tts_durations[1]
+        if actions_dur < target_dur:
+            await page.wait_for_timeout(int((target_dur - actions_dur) * 1000))
+            
         t_end = time.time() - script_start_time
         measured_timeline.append({
             "start": t_start,
@@ -120,23 +120,27 @@ async def record_browser_session():
             "narration": scene_contents[1]["narration"]
         })
         
-        # --- Step 3: Book Details & Contact Owner ---
+        # --- Step 3: Book Details View ---
         t_start = time.time() - script_start_time
-        print("Scrolling through book details page...")
-        await page.mouse.wheel(0, 450)
-        await page.wait_for_timeout(2500)
-        
-        print("Clicking contact button to start chat...")
+        print("Clicking first book card to view details...")
         try:
-            await page.click('button:has-text("傳送交換訊息")', timeout=3000)
+            await page.locator('.book-card-shadow').first.click(timeout=5000)
         except Exception as e:
-            print("Could not click contact button, continuing...", e)
-        # Wait for chat view input to load
-        try:
-            await page.wait_for_selector('input[placeholder="輸入訊息對話..."]', timeout=6000)
-        except:
-            pass
-        await page.wait_for_timeout(2500)
+            print("Could not click first book card, continuing...", e)
+            
+        await page.wait_for_selector('button:has-text("傳送交換訊息")', timeout=6000)
+        await page.wait_for_timeout(500)
+        
+        print("Scrolling through book details page...")
+        await page.mouse.wheel(0, 400)
+        await page.wait_for_timeout(1500)
+        
+        # Match duration
+        actions_dur = (time.time() - script_start_time) - t_start
+        target_dur = tts_durations[2]
+        if actions_dur < target_dur:
+            await page.wait_for_timeout(int((target_dur - actions_dur) * 1000))
+            
         t_end = time.time() - script_start_time
         measured_timeline.append({
             "start": t_start,
@@ -147,15 +151,55 @@ async def record_browser_session():
         
         # --- Step 4: Chat Room ---
         t_start = time.time() - script_start_time
-        print("Interacting inside the Chat Room...")
+        print("Clicking contact button to start chat...")
         try:
-            await page.click('input[placeholder="輸入訊息對話..."]', timeout=3000)
-            await page.type('input[placeholder="輸入訊息對話..."]', '請問這本書目前還在嗎？', delay=80)
-            await page.wait_for_timeout(1000)
-            await page.press('input[placeholder="輸入訊息對話..."]', 'Enter')
+            await page.click('button[class*="bg-primary"]:has-text("傳送交換訊息")', timeout=3000)
         except Exception as e:
-            print("Could not type in chat input, continuing...", e)
-        await page.wait_for_timeout(7000)
+            print("Could not click contact button with specific selector, trying fallback...", e)
+            try:
+                await page.click('button:has-text("傳送交換訊息")', timeout=3000)
+            except Exception as fe:
+                print("Fallback contact button click failed", fe)
+            
+        try:
+            await page.wait_for_selector('input[placeholder="輸入訊息對話..."]', timeout=6000)
+        except:
+            pass
+        await page.wait_for_timeout(500)
+        
+        print("Clicking quick reply chip...")
+        try:
+            await page.click('button:has-text("請問可以拍一下目錄跟書況實照嗎？")', timeout=3000)
+        except Exception as e:
+            print("Could not click quick reply chip, trying fallback text click...", e)
+            try:
+                await page.click('text="請問可以拍一下目錄跟書況實照嗎？"', timeout=3000)
+            except:
+                pass
+        await page.wait_for_timeout(1000)
+        
+        print("Sending photo attachment...")
+        try:
+            await page.click('button[title="發送內頁實照"]', timeout=3000)
+        except Exception as e:
+            print("Could not click photo button...", e)
+        await page.wait_for_timeout(1000)
+        
+        print("Scheduling meeting...")
+        try:
+            await page.click('button:has-text("預約面交")', timeout=3000)
+            await page.wait_for_timeout(500)
+            await page.click('button:has-text("發送面交相約邀請")', timeout=3000)
+        except Exception as e:
+            print("Could not schedule meeting...", e)
+        await page.wait_for_timeout(1000)
+        
+        # Match duration
+        actions_dur = (time.time() - script_start_time) - t_start
+        target_dur = tts_durations[3]
+        if actions_dur < target_dur:
+            await page.wait_for_timeout(int((target_dur - actions_dur) * 1000))
+            
         t_end = time.time() - script_start_time
         measured_timeline.append({
             "start": t_start,
@@ -171,12 +215,20 @@ async def record_browser_session():
             await page.click('text="我的書架"', timeout=4000)
         except Exception as e:
             print("Could not click My Shelf tab, continuing...", e)
-        await page.wait_for_timeout(3000)
+        await page.wait_for_timeout(1000)
+        
         try:
             await page.click('text="我借出的書"', timeout=3000)
         except Exception as e:
             pass
-        await page.wait_for_timeout(3000)
+        await page.wait_for_timeout(1000)
+        
+        # Match duration
+        actions_dur = (time.time() - script_start_time) - t_start
+        target_dur = tts_durations[4]
+        if actions_dur < target_dur:
+            await page.wait_for_timeout(int((target_dur - actions_dur) * 1000))
+            
         t_end = time.time() - script_start_time
         measured_timeline.append({
             "start": t_start,
@@ -192,30 +244,36 @@ async def record_browser_session():
             await page.click('button[title="AI 學術小助手"]', timeout=3000)
         except Exception as e:
             print("Could not open AI Assistant, continuing...", e)
-        await page.wait_for_timeout(2500)
+        await page.wait_for_timeout(1000)
         
         print("Asking AI assistant for 'Computer Organization' book...")
         try:
             await page.click('input[placeholder="問問 AI 課本助理..."]', timeout=3000)
-            await page.type('input[placeholder="問問 AI 課本助理..."]', '有沒有雷欽隆教授的計算機組織？', delay=80)
-            await page.wait_for_timeout(1000)
+            await page.type('input[placeholder="問問 AI 課本助理..."]', '有沒有雷欽隆教授的計算機組織？', delay=60)
+            await page.wait_for_timeout(500)
             await page.press('input[placeholder="問問 AI 課本助理..."]', 'Enter')
         except Exception as e:
             print("Could not type in AI chat, continuing...", e)
-        # Wait for AI response cards to load
+            
         try:
             await page.wait_for_selector('button:has-text("規格細節")', timeout=8000)
         except:
             pass
-        await page.wait_for_timeout(2500)
+        await page.wait_for_timeout(1000)
         
         print("Clicking AI recommendation card details...")
         try:
-            # Click details button inside AI result card
             await page.locator('button:has-text("規格細節")').first.click(timeout=3000)
         except Exception as e:
             print("Could not click AI details button, continuing...", e)
-        await page.wait_for_timeout(5000)
+        await page.wait_for_timeout(1000)
+        
+        # Match duration
+        actions_dur = (time.time() - script_start_time) - t_start
+        target_dur = tts_durations[5]
+        if actions_dur < target_dur:
+            await page.wait_for_timeout(int((target_dur - actions_dur) * 1000))
+            
         t_end = time.time() - script_start_time
         measured_timeline.append({
             "start": t_start,
@@ -231,7 +289,20 @@ async def record_browser_session():
             await page.click('text="帳號檔案"', timeout=4000)
         except Exception as e:
             print("Could not click Profile tab, continuing...", e)
-        await page.wait_for_timeout(7000)
+        await page.wait_for_timeout(1000)
+        
+        print("Scrolling Profile View...")
+        await page.mouse.wheel(0, 300)
+        await page.wait_for_timeout(1500)
+        await page.mouse.wheel(0, -300)
+        await page.wait_for_timeout(500)
+        
+        # Match duration
+        actions_dur = (time.time() - script_start_time) - t_start
+        target_dur = tts_durations[6]
+        if actions_dur < target_dur:
+            await page.wait_for_timeout(int((target_dur - actions_dur) * 1000))
+            
         t_end = time.time() - script_start_time
         measured_timeline.append({
             "start": t_start,
@@ -242,11 +313,10 @@ async def record_browser_session():
         
         print("Closing Playwright context...")
         await context.close()
-        browser.close()
+        await browser.close()
         
     print("Browser recording complete!")
     
-    # Save the measured timeline to cache
     with open(timeline_cache_path, "w", encoding="utf-8") as f:
         json.dump(measured_timeline, f, ensure_ascii=False, indent=2)
     print("Measured timeline saved to cache.")
@@ -260,16 +330,14 @@ def wrap_text(text, max_len=22):
         lines.append(text[i:i+max_len])
     return "\n".join(lines)
 
-def generate_voiceover(text, output_path, speed=1.24):
+def generate_voiceover(text, output_path, speed=1.38):
     """Generate TTS MP3 file and stretch/speed it up using ffmpeg atempo."""
     print(f"Generating TTS voiceover (speed={speed}): '{text[:15]}...'")
     temp_tts = output_path + ".temp.mp3"
     
-    # Generate original slow TTS
     tts = gTTS(text=text, lang='zh-tw')
     tts.save(temp_tts)
     
-    # Speed it up using FFmpeg atempo filter
     ffmpeg_exe = get_ffmpeg_exe()
     cmd = [
         ffmpeg_exe,
@@ -295,7 +363,6 @@ def apply_subtitles_and_audio():
     webm_file = max(video_files, key=os.path.getmtime)
     print(f"Found recording file: {webm_file}")
     
-    # Load timeline from cache
     if not os.path.exists(timeline_cache_path):
         print("Error: Timeline cache file missing. Please record again.")
         sys.exit(1)
@@ -304,27 +371,23 @@ def apply_subtitles_and_audio():
         timeline = json.load(f)
     print("Timeline successfully loaded from cache.")
     
-    # Generate narration audio files with FASTER speed
-    print("Generating TTS voiceover tracks (speed = 1.24)...")
     audio_tracks = []
     for idx, scene in enumerate(timeline):
         audio_path = os.path.join(scratch_dir, f"scene_audio_{idx}.mp3")
-        generate_voiceover(scene["narration"], audio_path, speed=1.24)
         audio_tracks.append((scene["start"], audio_path))
         
-    # Download background music
     bgm_path = os.path.join(scratch_dir, "intro_bgm.mp3")
     bgm_downloaded = False
     try:
-        bgm_url = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3"
-        print("Downloading BGM...")
-        urllib.request.urlretrieve(bgm_url, bgm_path)
+        if not os.path.exists(bgm_path):
+            bgm_url = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3"
+            print("Downloading BGM...")
+            urllib.request.urlretrieve(bgm_url, bgm_path)
+            print("BGM downloaded successfully.")
         bgm_downloaded = True
-        print("BGM downloaded successfully.")
     except Exception as e:
         print(f"BGM download failed: {e}. Video will only have narration.")
         
-    # Delay imports to avoid early failures
     from moviepy import VideoFileClip, AudioFileClip, CompositeAudioClip, concatenate_audioclips, AudioClip
     
     print("Loading video recording clip...")
@@ -333,14 +396,12 @@ def apply_subtitles_and_audio():
     print(f"Trimming video clip to measured duration: {final_duration:.2f}s")
     raw_video = raw_video.with_duration(final_duration)
     
-    # Image frame processor to draw custom subtitles
     print("Compiling Pillow subtitle processor...")
     
     def draw_subtitle_frame(image_array, t):
         img = Image.fromarray(image_array)
         current_sub = ""
         
-        # Find matching subtitle for current time t
         for scene in timeline:
             if scene["start"] <= t < scene["end"]:
                 current_sub = scene["subtitle"]
@@ -349,27 +410,22 @@ def apply_subtitles_and_audio():
         if current_sub:
             draw = ImageDraw.Draw(img, "RGBA")
             
-            # Wrap text to support multiple lines
             wrapped_text = wrap_text(current_sub, max_len=24)
             lines_count = len(wrapped_text.split("\n"))
             
-            # Calculate dynamic box height based on lines count
             box_height = 80 if lines_count == 1 else 115
             box_top = 720 - box_height - 15
             
-            # Bottom subtitle bar (semi-transparent black)
             draw.rectangle([(0, box_top), (1280, 705)], fill=(0, 0, 0, 185))
             
-            # Load font
             try:
-                font = ImageFont.truetype("C:\\Windows\\Fonts\\msjhbd.ttc", 26) # Bold
+                font = ImageFont.truetype("C:\\Windows\\Fonts\\msjhbd.ttc", 26)
             except:
                 try:
                     font = ImageFont.truetype("C:\\Windows\\Fonts\\msjh.ttc", 26)
                 except:
                     font = ImageFont.load_default()
                     
-            # Draw multi-line text centered
             try:
                 text_bbox = draw.multiline_textbbox((0, 0), wrapped_text, font=font)
                 text_width = text_bbox[2] - text_bbox[0]
@@ -385,11 +441,9 @@ def apply_subtitles_and_audio():
             
         return np.array(img)
         
-    # Apply Pillow transformation on video frames
     print("Applying subtitle overlays to video...")
     processed_video = raw_video.transform(lambda get_frame, t: draw_subtitle_frame(get_frame(t), t))
     
-    # Load and position audio tracks sequentially with silence clips
     print("Assembling audio tracks with silence padding...")
     narration_clips = []
     for idx, scene in enumerate(timeline):
@@ -398,29 +452,23 @@ def apply_subtitles_and_audio():
         tts_len = tts_clip.duration
         scene_duration = scene["end"] - scene["start"]
         
-        # Add the narration segment
         narration_clips.append(tts_clip)
         
-        # Add silence padding to fill the scene duration
         silence_len = scene_duration - tts_len
         if silence_len > 0:
-            # Create silence clip
             silence_clip = AudioClip(lambda t: 0.0, duration=silence_len, fps=44100)
             narration_clips.append(silence_clip)
         else:
             print(f"Warning: Scene {idx} narration ({tts_len:.2f}s) is longer than scene duration ({scene_duration:.2f}s)!")
             
-    # Concatenate all to make a single non-overlapping narration track
     narration_audio = concatenate_audioclips(narration_clips)
     
-    # BGM mixing
     if bgm_downloaded:
         try:
             bgm = AudioFileClip(bgm_path)
             bgm = bgm.with_duration(final_duration)
             bgm = bgm.multiply_volume(0.12)
             
-            # Mix BGM with the clean narration track
             mixed_audio = CompositeAudioClip([narration_audio, bgm])
             processed_video = processed_video.with_audio(mixed_audio)
             print("BGM mixed with narration successfully.")
@@ -430,7 +478,6 @@ def apply_subtitles_and_audio():
     else:
         processed_video = processed_video.with_audio(narration_audio)
     
-    # Write the compiled output file
     print(f"Compiling and writing final video to {output_video_path}...")
     processed_video.write_videofile(
         output_video_path,
@@ -445,8 +492,21 @@ def apply_subtitles_and_audio():
     print(f"Video saved at: {output_video_path}")
 
 async def main():
+    print("Generating voiceover audios first to get exact durations...")
+    VOICEOVER_SPEED = 1.38
+    tts_durations = []
+    for idx, scene in enumerate(scene_contents):
+        audio_path = os.path.join(scratch_dir, f"scene_audio_{idx}.mp3")
+        generate_voiceover(scene["narration"], audio_path, speed=VOICEOVER_SPEED)
+        from moviepy import AudioFileClip
+        clip = AudioFileClip(audio_path)
+        dur = clip.duration
+        clip.close()
+        tts_durations.append(dur)
+        print(f"Scene {idx} TTS duration: {dur:.2f}s")
+        
     print("Forcing browser re-record to sync text and actions with robust selectors...")
-    await record_browser_session()
+    await record_browser_session(tts_durations)
     apply_subtitles_and_audio()
 
 if __name__ == "__main__":
